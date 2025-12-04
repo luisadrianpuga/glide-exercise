@@ -122,7 +122,7 @@ export const accountRouter = router({
     .input(
       z.object({
         accountId: z.number(),
-        amount: z.number().positive(),
+        amount: z.number().gt(0, "Amount must be greater than zero"),
         fundingSource: fundingSourceSchema,
       })
     )
