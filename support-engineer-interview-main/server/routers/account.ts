@@ -229,7 +229,7 @@ export const accountRouter = router({
         .select()
         .from(transactions)
         .where(eq(transactions.accountId, input.accountId))
-        .orderBy(desc(transactions.createdAt));
+        .orderBy(desc(transactions.createdAt), desc(transactions.id));
 
       const enrichedTransactions = accountTransactions.map((transaction) => ({
         ...transaction,
