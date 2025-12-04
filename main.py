@@ -29,7 +29,7 @@ Impact: {self.impact}
 """
 
 
-def load_reported_issues(file_path='reported_issues.txt') -> List[Issue]:
+def load_reported_issues(file_path='data/reported_issues.txt') -> List[Issue]:
     """Parse reported_issues.txt and convert to Issue objects"""
     issues = []
     try:
@@ -131,7 +131,7 @@ def main():
     print("="*60)
     
     # Load and process issues
-    all_issues = load_reported_issues('reported_issues.txt')
+    all_issues = load_reported_issues('data/reported_issues.txt')
     
     if not all_issues:
         print("No issues found. Exiting.")
