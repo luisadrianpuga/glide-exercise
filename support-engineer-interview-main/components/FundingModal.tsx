@@ -22,6 +22,9 @@ const CARD_PATTERNS = [
   { name: "mastercard", regex: /^(5[1-5]\d{14}|2(2[2-9]\d{13}|[3-7]\d{14}))$/ },
   { name: "amex", regex: /^3[47]\d{13}$/ },
   { name: "discover", regex: /^6(?:011|5\d{2})\d{12}$/ },
+  { name: "diners", regex: /^3(?:0[0-5]|[68]\d)\d{11}$/ },
+  { name: "jcb", regex: /^(?:2131|1800|35\d{3})\d{11}$/ },
+  { name: "unionpay", regex: /^62\d{14,17}$/ },
 ];
 
 const passesLuhnCheck = (value: string) => {
@@ -92,7 +95,7 @@ export function FundingModal({ accountId, onClose, onSuccess }: FundingModalProp
         fundingSource: {
           type: data.fundingType,
           accountNumber: data.accountNumber,
-          routingNumber: data.routingNumber,
+          routingNumber: data.fundingType === "bank" ? data.routingNumber : undefined,
         },
       });
 
@@ -193,12 +196,19 @@ export function FundingModal({ accountId, onClose, onSuccess }: FundingModalProp
               <input
                 {...register("routingNumber", {
                   required: "Routing number is required",
-                  pattern: {
-                    value: /^\d{9}$/,
-                    message: "Routing number must be 9 digits",
+                  validate: (value) => {
+                    if (fundingType !== "bank") return true;
+                    if (!value || !value.trim()) {
+                      return "Routing number is required";
+                    }
+                    if (!/^\d{9}$/.test(value.trim())) {
+                      return "Routing number must be 9 digits";
+                    }
+                    return true;
                   },
                 })}
                 type="text"
+                inputMode="numeric"
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border"
                 placeholder="123456789"
               />

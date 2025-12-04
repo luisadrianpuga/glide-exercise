@@ -16,6 +16,9 @@ const CARD_PATTERNS = [
   { name: "mastercard", regex: /^(5[1-5]\d{14}|2(2[2-9]\d{13}|[3-7]\d{14}))$/ },
   { name: "amex", regex: /^3[47]\d{13}$/ },
   { name: "discover", regex: /^6(?:011|5\d{2})\d{12}$/ },
+  { name: "diners", regex: /^3(?:0[0-5]|[68]\d)\d{11}$/ },
+  { name: "jcb", regex: /^(?:2131|1800|35\d{3})\d{11}$/ },
+  { name: "unionpay", regex: /^62\d{14,17}$/ },
 ];
 
 const passesLuhnCheck = (value: string) => {
@@ -56,7 +59,10 @@ const fundingSourceSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("bank"),
     accountNumber: z.string().regex(/^\d+$/, "Account number must contain only digits"),
-    routingNumber: z.string().regex(/^\d{9}$/, "Routing number must be 9 digits"),
+    routingNumber: z
+      .string()
+      .transform((value) => value.trim())
+      .regex(/^\d{9}$/, "Routing number must be 9 digits"),
   }),
 ]);
 
