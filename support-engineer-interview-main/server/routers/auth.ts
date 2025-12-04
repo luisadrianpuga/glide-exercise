@@ -238,21 +238,26 @@ export const authRouter = router({
     }),
 
   logout: publicProcedure.mutation(async ({ ctx }) => {
-    if (ctx.user) {
-      // Delete session from database
-      let token: string | undefined;
+    const getSessionToken = () => {
       if ("cookies" in ctx.req) {
-        token = (ctx.req as any).cookies.session;
-      } else {
-        const cookieHeader = ctx.req.headers.get?.("cookie") || (ctx.req.headers as any).cookie;
-        token = cookieHeader
-          ?.split("; ")
-          .find((c: string) => c.startsWith("session="))
-          ?.split("=")[1];
+        return (ctx.req as any).cookies.session;
       }
-      if (token) {
-        await db.delete(sessions).where(eq(sessions.token, token));
-      }
+      const cookieHeader = ctx.req.headers.get?.("cookie") || (ctx.req.headers as any).cookie;
+      return cookieHeader
+        ?.split("; ")
+        .find((c: string) => c.startsWith("session="))
+        ?.split("=")[1];
+    };
+
+    const token = getSessionToken();
+    let deletedSession = false;
+
+    if (token) {
+      const deleted = await db
+        .delete(sessions)
+        .where(eq(sessions.token, token))
+        .returning({ token: sessions.token });
+      deletedSession = deleted.length > 0;
     }
 
     if ("setHeader" in ctx.res) {
@@ -261,6 +266,9 @@ export const authRouter = router({
       (ctx.res as Headers).set("Set-Cookie", `session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`);
     }
 
-    return { success: true, message: ctx.user ? "Logged out successfully" : "No active session" };
+    return {
+      success: deletedSession,
+      message: deletedSession ? "Logged out successfully" : "No active session to log out",
+    };
   }),
 });
