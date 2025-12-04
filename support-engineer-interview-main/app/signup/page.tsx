@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { trpc } from "@/lib/trpc/client";
 import Link from "next/link";
 import { getPasswordComplexityError, isCommonPassword } from "@/lib/validation/password";
+import { getEmailValidationError } from "@/lib/validation/email";
 
 type SignupFormData = {
   email: string;
@@ -116,9 +117,9 @@ export default function SignupPage() {
                 <input
                   {...register("email", {
                     required: "Email is required",
-                    pattern: {
-                      value: /^\S+@\S+$/i,
-                      message: "Invalid email address",
+                    validate: (value) => {
+                      const emailError = getEmailValidationError(value);
+                      return emailError || true;
                     },
                   })}
                   type="email"

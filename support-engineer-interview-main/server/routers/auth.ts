@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { users, sessions } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getPasswordComplexityError, isCommonPassword } from "@/lib/validation/password";
+import { getEmailValidationError } from "@/lib/validation/email";
 import { encryptSSN } from "@/lib/security/ssn";
 
 const MINIMUM_SIGNUP_AGE = 18;
@@ -19,6 +20,19 @@ const calculateAge = (dob: Date, today: Date) => {
   }
   return age;
 };
+
+const emailSchema = z
+  .string()
+  .superRefine((value, ctx) => {
+    const emailError = getEmailValidationError(value);
+    if (emailError) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: emailError,
+      });
+    }
+  })
+  .transform((value) => value.trim().toLowerCase());
 
 const passwordSchema = z
   .string()
@@ -70,7 +84,7 @@ export const authRouter = router({
   signup: publicProcedure
     .input(
       z.object({
-        email: z.string().email().toLowerCase(),
+        email: emailSchema,
         password: passwordSchema,
         firstName: z.string().min(1),
         lastName: z.string().min(1),
@@ -140,7 +154,7 @@ export const authRouter = router({
   login: publicProcedure
     .input(
       z.object({
-        email: z.string().email(),
+        email: emailSchema,
         password: z.string(),
       })
     )
