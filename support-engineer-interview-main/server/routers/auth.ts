@@ -9,6 +9,8 @@ import { eq } from "drizzle-orm";
 import { getPasswordComplexityError, isCommonPassword } from "@/lib/validation/password";
 import { getEmailValidationError } from "@/lib/validation/email";
 import { encryptSSN } from "@/lib/security/ssn";
+import { getStateValidationError } from "@/lib/validation/state";
+import { validateInternationalPhone } from "@/lib/validation/phone";
 
 const MINIMUM_SIGNUP_AGE = 18;
 
@@ -88,12 +90,34 @@ export const authRouter = router({
         password: passwordSchema,
         firstName: z.string().min(1),
         lastName: z.string().min(1),
-        phoneNumber: z.string().regex(/^\+?\d{10,15}$/),
+        phoneNumber: z
+          .string()
+          .superRefine((value, ctx) => {
+            const error = validateInternationalPhone(value);
+            if (error) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: error,
+              });
+            }
+          })
+          .transform((value) => value.replace(/\s+/g, "")),
         dateOfBirth: dateOfBirthSchema,
         ssn: z.string().regex(/^\d{9}$/),
         address: z.string().min(1),
         city: z.string().min(1),
-        state: z.string().length(2).toUpperCase(),
+        state: z
+          .string()
+          .superRefine((value, ctx) => {
+            const error = getStateValidationError(value);
+            if (error) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: error,
+              });
+            }
+          })
+          .transform((value) => value.trim().toUpperCase()),
         zipCode: z.string().regex(/^\d{5}$/),
       })
     )

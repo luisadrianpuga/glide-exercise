@@ -7,6 +7,8 @@ import { trpc } from "@/lib/trpc/client";
 import Link from "next/link";
 import { getPasswordComplexityError, isCommonPassword } from "@/lib/validation/password";
 import { getEmailValidationError } from "@/lib/validation/email";
+import { getStateValidationError } from "@/lib/validation/state";
+import { validateInternationalPhone } from "@/lib/validation/phone";
 
 type SignupFormData = {
   email: string;
@@ -207,13 +209,13 @@ export default function SignupPage() {
                 <input
                   {...register("phoneNumber", {
                     required: "Phone number is required",
-                    pattern: {
-                      value: /^\d{10}$/,
-                      message: "Phone number must be 10 digits",
+                    validate: (value) => {
+                      const error = validateInternationalPhone(value);
+                      return error || true;
                     },
                   })}
                   type="tel"
-                  placeholder="1234567890"
+                  placeholder="+14155552671"
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border"
                 />
                 {errors.phoneNumber && <p className="mt-1 text-sm text-red-600">{errors.phoneNumber.message}</p>}
@@ -294,9 +296,9 @@ export default function SignupPage() {
                   <input
                     {...register("state", {
                       required: "State is required",
-                      pattern: {
-                        value: /^[A-Z]{2}$/,
-                        message: "Use 2-letter state code",
+                      validate: (value) => {
+                        const error = getStateValidationError(value);
+                        return error || true;
                       },
                     })}
                     type="text"

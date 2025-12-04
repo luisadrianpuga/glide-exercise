@@ -120,15 +120,20 @@ export function FundingModal({ accountId, onClose, onSuccess }: FundingModalProp
               <input
                 {...register("amount", {
                   required: "Amount is required",
-                  pattern: {
-                    value: /^\d+\.?\d{0,2}$/,
-                    message: "Invalid amount format",
-                  },
                   validate: (value) => {
-                    const parsed = parseFloat(value);
-                    if (Number.isNaN(parsed)) {
-                      return "Enter a valid amount";
+                    if (!/^\d+(?:\.\d{1,2})?$/.test(value)) {
+                      return "Enter a valid amount (up to 2 decimals)";
                     }
+
+                    if (/^0\d+/.test(value)) {
+                      return "Remove unnecessary leading zeros";
+                    }
+
+                    if (/^0\.0{0,2}$/.test(value)) {
+                      return "Amount must be greater than $0.00";
+                    }
+
+                    const parsed = parseFloat(value);
                     if (parsed <= 0) {
                       return "Amount must be greater than $0.00";
                     }
