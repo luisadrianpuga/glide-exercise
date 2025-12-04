@@ -17,6 +17,53 @@ type FundingFormData = {
   routingNumber?: string;
 };
 
+const CARD_PATTERNS = [
+  { name: "visa", regex: /^4\d{12}(\d{3})?(\d{3})?$/ },
+  { name: "mastercard", regex: /^(5[1-5]\d{14}|2(2[2-9]\d{13}|[3-7]\d{14}))$/ },
+  { name: "amex", regex: /^3[47]\d{13}$/ },
+  { name: "discover", regex: /^6(?:011|5\d{2})\d{12}$/ },
+];
+
+const passesLuhnCheck = (value: string) => {
+  let sum = 0;
+  let shouldDouble = false;
+
+  for (let i = value.length - 1; i >= 0; i--) {
+    let digit = parseInt(value[i], 10);
+
+    if (shouldDouble) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+
+    sum += digit;
+    shouldDouble = !shouldDouble;
+  }
+
+  return sum % 10 === 0;
+};
+
+const getSupportedCardType = (value: string) => {
+  return CARD_PATTERNS.find((pattern) => pattern.regex.test(value));
+};
+
+const validateCardNumber = (value: string) => {
+  const digitsOnly = value.replace(/\s+/g, "");
+  if (!/^\d{13,19}$/.test(digitsOnly)) {
+    return "Card number must be 13-19 digits";
+  }
+
+  if (!getSupportedCardType(digitsOnly)) {
+    return "Unsupported card type";
+  }
+
+  if (!passesLuhnCheck(digitsOnly)) {
+    return "Invalid card number";
+  }
+
+  return true;
+};
+
 export function FundingModal({ accountId, onClose, onSuccess }: FundingModalProps) {
   const [error, setError] = useState("");
   const {
@@ -112,20 +159,25 @@ export function FundingModal({ accountId, onClose, onSuccess }: FundingModalProp
             <input
               {...register("accountNumber", {
                 required: `${fundingType === "card" ? "Card" : "Account"} number is required`,
-                pattern: {
-                  value: fundingType === "card" ? /^\d{16}$/ : /^\d+$/,
-                  message: fundingType === "card" ? "Card number must be 16 digits" : "Invalid account number",
-                },
+                ...(fundingType === "card"
+                  ? {}
+                  : {
+                      pattern: {
+                        value: /^\d+$/,
+                        message: "Invalid account number",
+                      },
+                    }),
                 validate: {
                   validCard: (value) => {
                     if (fundingType !== "card") return true;
-                    return value.startsWith("4") || value.startsWith("5") || "Invalid card number";
+                    return validateCardNumber(value);
                   },
                 },
               })}
               type="text"
+              inputMode="numeric"
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border"
-              placeholder={fundingType === "card" ? "1234567812345678" : "123456789"}
+              placeholder={fundingType === "card" ? "1234123412341234" : "123456789"}
             />
             {errors.accountNumber && <p className="mt-1 text-sm text-red-600">{errors.accountNumber.message}</p>}
           </div>

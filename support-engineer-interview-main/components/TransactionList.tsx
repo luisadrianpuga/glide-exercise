@@ -9,6 +9,17 @@ interface TransactionListProps {
 export function TransactionList({ accountId }: TransactionListProps) {
   const { data: transactions, isLoading } = trpc.account.getTransactions.useQuery({ accountId });
 
+  const sanitizeDescription = (description: string) => {
+    const replacements: Record<string, string> = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    };
+    return description.replace(/[&<>"']/g, (char) => replacements[char]);
+  };
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
@@ -68,7 +79,7 @@ export function TransactionList({ accountId }: TransactionListProps) {
                 </span>
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {transaction.description ? <span dangerouslySetInnerHTML={{ __html: transaction.description }} /> : "-"}
+                {transaction.description ? sanitizeDescription(transaction.description) : "-"}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 <span className={transaction.type === "deposit" ? "text-green-600" : "text-red-600"}>

@@ -6,17 +6,76 @@ import { publicProcedure, router } from "../trpc";
 import { db } from "@/lib/db";
 import { users, sessions } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { getPasswordComplexityError, isCommonPassword } from "@/lib/validation/password";
+import { encryptSSN } from "@/lib/security/ssn";
+
+const MINIMUM_SIGNUP_AGE = 18;
+
+const calculateAge = (dob: Date, today: Date) => {
+  let age = today.getFullYear() - dob.getFullYear();
+  const monthDiff = today.getMonth() - dob.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+    age--;
+  }
+  return age;
+};
+
+const passwordSchema = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .superRefine((value, ctx) => {
+    if (isCommonPassword(value)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Password is too common",
+      });
+    }
+
+    const complexityError = getPasswordComplexityError(value);
+    if (complexityError) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: complexityError,
+      });
+    }
+  });
+
+const dateOfBirthSchema = z.string().superRefine((value, ctx) => {
+  const dob = new Date(value);
+  if (Number.isNaN(dob.getTime())) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Date of birth must be a valid date",
+    });
+    return;
+  }
+
+  const today = new Date();
+  if (dob > today) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Date of birth cannot be in the future",
+    });
+  }
+
+  if (calculateAge(dob, today) < MINIMUM_SIGNUP_AGE) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "You must be at least 18 years old to sign up",
+    });
+  }
+});
 
 export const authRouter = router({
   signup: publicProcedure
     .input(
       z.object({
         email: z.string().email().toLowerCase(),
-        password: z.string().min(8),
+        password: passwordSchema,
         firstName: z.string().min(1),
         lastName: z.string().min(1),
         phoneNumber: z.string().regex(/^\+?\d{10,15}$/),
-        dateOfBirth: z.string(),
+        dateOfBirth: dateOfBirthSchema,
         ssn: z.string().regex(/^\d{9}$/),
         address: z.string().min(1),
         city: z.string().min(1),
@@ -39,6 +98,7 @@ export const authRouter = router({
       await db.insert(users).values({
         ...input,
         password: hashedPassword,
+        ssn: encryptSSN(input.ssn),
       });
 
       // Fetch the created user
@@ -72,7 +132,9 @@ export const authRouter = router({
         (ctx.res as Headers).set("Set-Cookie", `session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800`);
       }
 
-      return { user: { ...user, password: undefined }, token };
+      const { password: _password, ssn: _ssn, ...safeUser } = user;
+
+      return { user: safeUser, token };
     }),
 
   login: publicProcedure
@@ -120,7 +182,9 @@ export const authRouter = router({
         (ctx.res as Headers).set("Set-Cookie", `session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800`);
       }
 
-      return { user: { ...user, password: undefined }, token };
+      const { password: _password, ssn: _ssn, ...safeUser } = user;
+
+      return { user: safeUser, token };
     }),
 
   logout: publicProcedure.mutation(async ({ ctx }) => {

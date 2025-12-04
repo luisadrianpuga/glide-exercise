@@ -4,15 +4,10 @@ import * as schema from "./schema";
 
 const dbPath = "bank.db";
 
-const sqlite = new Database(dbPath);
+const sqlite = new Database(dbPath, { fileMustExist: false });
 export const db = drizzle(sqlite, { schema });
 
-const connections: Database.Database[] = [];
-
-export function initDb() {
-  const conn = new Database(dbPath);
-  connections.push(conn);
-
+function runMigrations() {
   // Create tables if they don't exist
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -62,5 +57,8 @@ export function initDb() {
   `);
 }
 
-// Initialize database on import
-initDb();
+runMigrations();
+
+process.on("beforeExit", () => {
+  sqlite.close();
+});

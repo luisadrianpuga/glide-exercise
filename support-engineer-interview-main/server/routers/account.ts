@@ -3,13 +3,62 @@ import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../trpc";
 import { db } from "@/lib/db";
 import { accounts, transactions } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 
 function generateAccountNumber(): string {
   return Math.floor(Math.random() * 1000000000)
     .toString()
     .padStart(10, "0");
 }
+
+const CARD_PATTERNS = [
+  { name: "visa", regex: /^4\d{12}(\d{3})?(\d{3})?$/ },
+  { name: "mastercard", regex: /^(5[1-5]\d{14}|2(2[2-9]\d{13}|[3-7]\d{14}))$/ },
+  { name: "amex", regex: /^3[47]\d{13}$/ },
+  { name: "discover", regex: /^6(?:011|5\d{2})\d{12}$/ },
+];
+
+const passesLuhnCheck = (value: string) => {
+  let sum = 0;
+  let shouldDouble = false;
+
+  for (let i = value.length - 1; i >= 0; i--) {
+    let digit = parseInt(value[i], 10);
+
+    if (shouldDouble) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+
+    sum += digit;
+    shouldDouble = !shouldDouble;
+  }
+
+  return sum % 10 === 0;
+};
+
+const cardNumberSchema = z
+  .string()
+  .regex(/^\d{13,19}$/, "Card number must be 13-19 digits")
+  .refine((value) => CARD_PATTERNS.some((pattern) => pattern.regex.test(value)), {
+    message: "Unsupported card type",
+  })
+  .refine((value) => passesLuhnCheck(value), {
+    message: "Invalid card number",
+  });
+
+const fundingSourceSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("card"),
+    accountNumber: cardNumberSchema,
+    routingNumber: z.undefined().optional(),
+  }),
+  z.object({
+    type: z.literal("bank"),
+    accountNumber: z.string().regex(/^\d+$/, "Account number must contain only digits"),
+    routingNumber: z.string().regex(/^\d{9}$/, "Routing number must be 9 digits"),
+  }),
+]);
 
 export const accountRouter = router({
   createAccount: protectedProcedure
@@ -51,20 +100,16 @@ export const accountRouter = router({
         status: "active",
       });
 
-      // Fetch the created account
       const account = await db.select().from(accounts).where(eq(accounts.accountNumber, accountNumber!)).get();
 
-      return (
-        account || {
-          id: 0,
-          userId: ctx.user.id,
-          accountNumber: accountNumber!,
-          accountType: input.accountType,
-          balance: 100,
-          status: "pending",
-          createdAt: new Date().toISOString(),
-        }
-      );
+      if (!account) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to create account",
+        });
+      }
+
+      return account;
     }),
 
   getAccounts: protectedProcedure.query(async ({ ctx }) => {
@@ -78,11 +123,7 @@ export const accountRouter = router({
       z.object({
         accountId: z.number(),
         amount: z.number().positive(),
-        fundingSource: z.object({
-          type: z.enum(["card", "bank"]),
-          accountNumber: z.string(),
-          routingNumber: z.string().optional(),
-        }),
+        fundingSource: fundingSourceSchema,
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -119,25 +160,41 @@ export const accountRouter = router({
         processedAt: new Date().toISOString(),
       });
 
-      // Fetch the created transaction
-      const transaction = await db.select().from(transactions).orderBy(transactions.createdAt).limit(1).get();
+      const transaction = await db
+        .select()
+        .from(transactions)
+        .where(eq(transactions.accountId, input.accountId))
+        .orderBy(desc(transactions.createdAt))
+        .limit(1)
+        .get();
+
+      if (!transaction) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to record transaction",
+        });
+      }
 
       // Update account balance
-      await db
+      const updatedAccount = await db
         .update(accounts)
         .set({
           balance: account.balance + amount,
         })
-        .where(eq(accounts.id, input.accountId));
+        .where(eq(accounts.id, input.accountId))
+        .returning()
+        .get();
 
-      let finalBalance = account.balance;
-      for (let i = 0; i < 100; i++) {
-        finalBalance = finalBalance + amount / 100;
+      if (!updatedAccount) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to update account balance",
+        });
       }
 
       return {
         transaction,
-        newBalance: finalBalance, // This will be slightly off due to float precision
+        newBalance: updatedAccount.balance,
       };
     }),
 
@@ -165,7 +222,8 @@ export const accountRouter = router({
       const accountTransactions = await db
         .select()
         .from(transactions)
-        .where(eq(transactions.accountId, input.accountId));
+        .where(eq(transactions.accountId, input.accountId))
+        .orderBy(desc(transactions.createdAt));
 
       const enrichedTransactions = [];
       for (const transaction of accountTransactions) {
