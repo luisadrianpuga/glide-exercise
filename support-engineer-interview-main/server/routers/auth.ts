@@ -133,10 +133,16 @@ export const authRouter = router({
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 7);
 
+      await db.delete(sessions).where(eq(sessions.userId, user.id));
+
+      const expiresBufferMinutes = Number(process.env.SESSION_BUFFER_MINUTES || "5");
+      const bufferedExpiresAt = new Date(expiresAt);
+      bufferedExpiresAt.setMinutes(bufferedExpiresAt.getMinutes() - expiresBufferMinutes);
+
       await db.insert(sessions).values({
         userId: user.id,
         token,
-        expiresAt: expiresAt.toISOString(),
+        expiresAt: bufferedExpiresAt.toISOString(),
       });
 
       // Set cookie
@@ -184,10 +190,16 @@ export const authRouter = router({
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 7);
 
+      await db.delete(sessions).where(eq(sessions.userId, user.id));
+
+      const expiresBufferMinutes = Number(process.env.SESSION_BUFFER_MINUTES || "5");
+      const bufferedExpiresAt = new Date(expiresAt);
+      bufferedExpiresAt.setMinutes(bufferedExpiresAt.getMinutes() - expiresBufferMinutes);
+
       await db.insert(sessions).values({
         userId: user.id,
         token,
-        expiresAt: expiresAt.toISOString(),
+        expiresAt: bufferedExpiresAt.toISOString(),
       });
 
       if ("setHeader" in ctx.res) {
